@@ -3,12 +3,11 @@ import BattleshipSimulator.BattleshipController as BattleCtrl
 import BattleshipSimulator.Models.BattleshipModel as BattleModel
 import BattleshipSimulator.Models.BattleshipSystem as BattleSystem
 import BattleshipSimulator.Views.BattleshipView as BattleGUI
-import BattleshipSimulator.Models.SimulatorViewUtilities as SimulatorViewUtilities
 import arcade
 
 # Constants for the screen width and height
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 1024
 
 def main():
     # Create the model of the battleship
@@ -26,7 +25,7 @@ def main():
     
     # Create the controller and view, set up the window, and start the GUI loop
     window = arcade.Window(SCREEN_WIDTH, SCREEN_HEIGHT, "Battleship Simulator")
-    view = BattleGUI.BattleshipView(BattleCtrl.BattleshipController(model))
+    view = BattleGUI.BattleshipView(BattleCtrl.BattleshipController(model), SCREEN_WIDTH, SCREEN_HEIGHT)
     window.show_view(view)
     arcade.enable_timings()
     arcade.run()

@@ -28,7 +28,7 @@ class BattleshipModel:
         self.last_x = 0
         self.last_y = 0
         self.last_angle = 90
-        self.speed = 100
+        self.speed = 15
         
         self.attributes = {}
         self.observers = []
@@ -91,8 +91,6 @@ class BattleshipModel:
                     self.collision_warning = True
                 if SimulatorUtilities.polygons_intersect(self.battleship_geometry, obstacle):
                     self.collision_event = True
-            
-                print(f"{self.x},{self.y} @ {self.angle} deg", timedelta)
     
     def set_path(self, coords):
         self.path = []
