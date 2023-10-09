@@ -55,57 +55,66 @@ class BattleshipView(arcade.View):
         self.setup()
     
     def setup(self):
-        self.status_bar = Status_Bar(self.screen_width / 2, 14, self.screen_width, 28, self)
-        self.battleship_safety_colors = [arcade.color.GREEN, arcade.color.ORANGE, arcade.color.RED]
-        collision_warning = self.controller.model_get("collision_warning")
-        collision_event = self.controller.model_get("collision_event")
-        if collision_warning:
-            self.collision_index = 2 if collision_event else 1
-        else:
-            self.collision_index = 0
-        # Clear the ShapeList to update it
-        self.ship_shape_list = arcade.ShapeElementList()
-        # Draw the battleship representation (a polygon)
-        self.battleship_color = arcade.color.LIGHT_GRAY if self.collision_index != 2 else arcade.color.RED
-        battleship_coordinates = SimulatorViewUtilities.convert_coords_list_meters_to_pixels(self.controller.model_get("battleship_geometry"), self.PIXELS_PER_METER)
+        self.collision_index = 0
+        self.status_bar = Status_Pane(self.screen_width - 150, self.screen_height / 2, 300, self.screen_height, self)
+        safety_colors = [arcade.color.GREEN, arcade.color.ORANGE, arcade.color.RED]
+        # Create three versions of the graphic: normal, collision warning, and collision event
+        self.ship_shape_list = []
+        # Calculate the dimensions and location of the ship
+        battleship_coordinates = SimulatorViewUtilities.convert_coords_list_meters_to_pixels(
+            self.controller.model_get("battleship_geometry"), self.PIXELS_PER_METER)
         x, y, width, height = SimulatorViewUtilities.get_bounding_box(battleship_coordinates)
-        self.battleship_coordinates = SimulatorUtilities.transform_coordinates(battleship_coordinates, -x, -y)
-        self.battleship_shape = arcade.create_polygon(battleship_coordinates, self.battleship_color)
-        self.ship_shape_list.append(self.battleship_shape)
+        # Change the coordinates so that 0,0 is the center of the shape
+        battleship_coordinates = SimulatorUtilities.transform_coordinates(battleship_coordinates, -x, -y)
 
-        battleship_ring_coordinates = SimulatorViewUtilities.convert_coords_list_meters_to_pixels(self.controller.model_get("minimum_safe_area_geometry"), self.PIXELS_PER_METER)
+        # Calculate the dimensions and location of the safety ring
+        battleship_ring_coordinates = SimulatorViewUtilities.convert_coords_list_meters_to_pixels(
+            self.controller.model_get("minimum_safe_area_geometry"), self.PIXELS_PER_METER)
         x, y, width, height = SimulatorViewUtilities.get_bounding_box(battleship_ring_coordinates)
-        self.battleship_ring_coordinates = SimulatorUtilities.transform_coordinates(battleship_ring_coordinates, -x, -y)
-        self.battleship_safety_shape = arcade.create_line_loop(battleship_ring_coordinates, self.battleship_safety_colors[self.collision_index], 2)
-        self.ship_shape_list.append(self.battleship_safety_shape)
+        # Change the coordinates so that 0,0 is the center of the shape
+        battleship_ring_coordinates = SimulatorUtilities.transform_coordinates(battleship_ring_coordinates, -x, -y)
+
+        for i in range(3):
+            # Clear the ShapeList to update it
+            self.ship_shape_list.append(arcade.ShapeElementList())
+            # Draw the battleship representation (a polygon)
+            battleship_color = arcade.color.LIGHT_GRAY if i != 2 else arcade.color.RED
+            battleship_shape = arcade.create_polygon(battleship_coordinates, battleship_color)
+            self.ship_shape_list[i].append(battleship_shape)
+            # Draw the battleship's safety ring representation
+            battleship_safety_shape = arcade.create_line_loop(battleship_ring_coordinates, safety_colors[i], 2)
+            self.ship_shape_list[i].append(battleship_safety_shape)
+        self.current_battleship_graphic = self.ship_shape_list[0]
 
         # Clear the ShapeList to update it
         self.obstacle_list = arcade.ShapeElementList()
         obstacle_color = arcade.color.BROWN
-        for obstacle in self.controller.model_get("obstacles"):
+        for obstacle in self.controller.world_get("obstacles"):
             obstacle_shape = arcade.create_polygon(SimulatorViewUtilities.convert_coords_list_meters_to_pixels(
                 obstacle, self.PIXELS_PER_METER),
             obstacle_color)
             self.obstacle_list.append(obstacle_shape)
     
     def on_update(self, timedelta):
+        # Update the model
+        if self.controller.simulation_running:
+            self.controller.update(timedelta)
+            # The model that is displayed depends on the collision state (none, warning, event)
+            if not self.controller.model_get("collision_warning"):
+                self.collision_index = 0
+            elif not self.controller.model_get("collision_event"):
+                self.collision_index = 1
+            else:
+                self.collision_index = 2
+            
+        # Use the correct graphic to identify the collision state
+        self.current_battleship_graphic = self.ship_shape_list[self.collision_index]        
+        self.current_battleship_graphic.center_x = self.controller.model_get("x") * self.PIXELS_PER_METER
+        self.current_battleship_graphic.center_y = self.controller.model_get("y") * self.PIXELS_PER_METER
+        self.current_battleship_graphic.angle = self.controller.model_get("angle")
+        
         self.elapsed_time += timedelta
-        self.controller.trigger_model_update(timedelta)
-        self.setup()
-        """move_x, move_y = SimulatorViewUtilities.convert_coords_meters_to_pixels(
-            self.controller.model_get("x"),
-            self.controller.model_get("y"),
-            self.PIXELS_PER_METER)
-        self.ship_shape_list.center_x = move_x
-        self.ship_shape_list.center_y = move_y
-        self.ship_shape_list.angle = self.controller.model_get("angle")
-
-        collision_warning = self.controller.model_get("collision_warning")
-        if collision_warning and self.current_safety_index == 0 or not collision_warning and self.current_safety_index == 1:
-            self.ship_shape_list.remove(self.battleship_safety_shape)
-            self.current_safety_index = 1 if collision_warning else 0
-            self.battleship_safety_shape = arcade.create_line_loop(self.battleship_ring_coordinates, self.battleship_safety_colors[self.current_safety_index], 2)
-            self.ship_shape_list.append(self.battleship_safety_shape)"""
+        self.status_bar.update(timedelta)
 
     def on_draw(self):
         """
@@ -113,9 +122,27 @@ class BattleshipView(arcade.View):
         """
         self.clear()
         arcade.start_render()
-        arcade.draw_line_strip(SimulatorViewUtilities.convert_coords_list_meters_to_pixels(self.controller.model_get("path"), self.PIXELS_PER_METER), arcade.color.BLUE, 2)
+
+        # Draw the world
         self.obstacle_list.draw()
-        self.ship_shape_list.draw()
+
+        # Draw the projected path
+        arcade.draw_line_strip(
+            SimulatorViewUtilities.convert_coords_list_meters_to_pixels(
+                self.controller.model_get("Navigation:projected_path"),
+                self.PIXELS_PER_METER),
+            arcade.color.GREEN, 2)
+        
+        # Draw the waypoints
+        if len(self.controller.model_get("Navigation:waypoints")) > 1:
+            for i, waypoint in enumerate(self.controller.model_get("Navigation:waypoints")[1:]):
+                waypoint = SimulatorViewUtilities.convert_coords_meters_to_pixels(*waypoint, self.PIXELS_PER_METER)
+                arcade.draw_circle_filled(waypoint[0], waypoint[1], 25 * self.PIXELS_PER_METER, arcade.color.YELLOW + (192,))
+                arcade.draw_point(waypoint[0], waypoint[1], arcade.color.RED, 4)
+                arcade.draw_text(i + 1, waypoint[0] + 4, waypoint[1] + 4, arcade.color.RED)
+        
+        # Draw the ships
+        self.current_battleship_graphic.draw()
         self.status_bar.draw()
     
     def on_mouse_motion(self, x, y, dx, dy):
@@ -149,7 +176,7 @@ class BattleshipView(arcade.View):
         """
         pass
 
-class Status_Bar():
+class Status_Pane():
 
     STD_OFFSET = 5
 
@@ -163,26 +190,52 @@ class Status_Bar():
         self.max_y = y + height // 2
         self.min_y = self.max_y - height
         self.parent_view = parent_view
+        self.setup()
 
     def setup(self):
-        pass
+        self.update(0)
+
+    def update(self, timedelta):
+        key_text = ""
+        val_text = ""
+        header_text = ""
+        self.monitored_data = {
+            "----- Model Data -----": {
+                "Ship X": round(self.parent_view.controller.model_get('x')),
+                "Ship Y": round(self.parent_view.controller.model_get('y')),
+                "Speed": f"{round(self.parent_view.controller.model_get('current_speed'), 1)} m/s",
+                "Course Angle": f"{round(self.parent_view.controller.model_get('angle'))}°",
+                "Col. Warning": self.parent_view.controller.model_get("collision_warning"),
+                "Col. Event": self.parent_view.controller.model_get("collision_event")
+            },
+            "----- View Data -----": {
+                "Total Time": SimulatorViewUtilities.seconds_to_hms(self.parent_view.elapsed_time),
+                "Time Delta": f"{round(timedelta * 1000)} ms",
+                "Frame Rate": f"{int(arcade.get_fps())} FPS",
+                "Mouse X (px)": self.parent_view.mouse_x,
+                "Mouse Y (px)": self.parent_view.mouse_y,
+                "Mouse X (m)": round(self.parent_view.mouse_x * self.parent_view.PIXELS_PER_METER, 2),
+                "Mouse Y (m)": round(self.parent_view.mouse_y * self.parent_view.PIXELS_PER_METER, 2),
+            }
+        }
+        for section in self.monitored_data:
+            key_text += "\n"
+            val_text += "\n"
+            header_text += section + "\n"
+            for key, value in self.monitored_data[section].items():
+                header_text += "\n"
+                key_text += key + "\n"
+                val_text += str(value) + "\n"
+            key_text += "\n"
+            val_text += "\n"
+            header_text += "\n"
+
+        self.key_column = arcade.Text(key_text, self.min_x + 10, self.max_y - 10, arcade.color.WHITE, 12, self.width / 2, anchor_x="left", anchor_y = "top", multiline=True)
+        self.val_column = arcade.Text(val_text, self.min_x + (self.width / 2), self.max_y - 10, arcade.color.WHITE, 12, self.width / 2, anchor_x="left", anchor_y = "top", multiline=True)
+        self.header_column = arcade.Text(header_text, self.min_x + (self.width / 2), self.max_y - 10, arcade.color.YELLOW, 12, self.width, anchor_x = "center", anchor_y = "top", align = "center", multiline=True)
     
     def draw(self):
-        #TODO: use the ship's x,y instead of the mouse
-        arcade.draw_rectangle_filled(
-            self.x, self.y, self.width, self.height, arcade.color.BLACK)
-        arcade.draw_line(self.min_x, self.max_y, self.max_x, self.max_y, arcade.color.WHITE)
-        meters_x, meters_y = SimulatorViewUtilities.convert_coords_pixels_to_meters(
-            self.parent_view.mouse_x, self.parent_view.mouse_y, self.parent_view.PIXELS_PER_METER)
-        arcade.draw_text(f"[meters] {round(meters_x, 2)}, {round(meters_y, 2)}",
-            self.min_x + self.STD_OFFSET, self.y,arcade.color.WHITE, font_size=10, anchor_x="left", anchor_y="center")
-        arcade.draw_text(f"[pixels] {self.parent_view.mouse_x}, {self.parent_view.mouse_y}",
-            self.min_x + 175, self.y,arcade.color.WHITE, font_size=10, anchor_x="left", anchor_y="center")
-        arcade.draw_text(f"[angle] {round(self.parent_view.controller.model_get('angle'))}°",
-            self.min_x + 350, self.y,arcade.color.WHITE, font_size=10, anchor_x="left", anchor_y="center")
-        
-        arcade.draw_text(f"{int(arcade.get_fps())} FPS",
-            self.max_x - self.STD_OFFSET - 100, self.y,arcade.color.WHITE, font_size=10, anchor_x="center", anchor_y="center")
-        
-        arcade.draw_text(SimulatorViewUtilities.seconds_to_hms(self.parent_view.elapsed_time),
-            self.max_x - self.STD_OFFSET, self.y,arcade.color.WHITE, font_size=10, anchor_x="right", anchor_y="center")
+        arcade.draw_rectangle_filled(self.x, self.y, self.width, self.height, arcade.color.BLACK)
+        self.key_column.draw()
+        self.val_column.draw()
+        self.header_column.draw()
