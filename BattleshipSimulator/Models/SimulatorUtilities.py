@@ -83,8 +83,6 @@ def update_circle_coordinates(current_x, current_y, center_x, center_y, radius, 
 
     return new_x, new_y, facing_angle_degrees % 360
 
-import math
-
 def update_path_coordinates_with_angle(path, speed, timedelta):
     """
     Update the current x, y coordinates along a defined path based on a given speed and time delta.
@@ -127,7 +125,7 @@ def update_path_coordinates_with_angle(path, speed, timedelta):
     
     # Calculate the facing angle
     facing_angle_rad = math.atan2(dy, dx)
-    facing_angle_degrees = math.degrees(facing_angle_rad) % 360
+    facing_angle_degrees = (math.degrees(facing_angle_rad) + 270) % 360
     
     while distance_to_cover > distance_to_next_waypoint and len(path) > 2:
         # Subtract the distance to the next waypoint from the total distance to cover

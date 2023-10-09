@@ -13,6 +13,17 @@ class BattleshipSystem:
     def __init__(self, name, model):
         self.name = name
         self.model = model
+        self.logging_variables = []
+        self.setup()
+    
+    def setup(self):
+        pass
+
+    def update(self, timedelta):
+        pass
+
+    def logging_package(self):
+        return {f"{self.name}.{k}": getattr(self, k) for k in self.logging_variables}
 
     def commands(self):
         """
@@ -49,7 +60,6 @@ class BattleshipSystem:
         """
         self.model.set_attribute(self.name, attr_name, value)
 
-
 class Rudder(BattleshipSystem):
     """Represents the rudder system of the battleship."""
     
@@ -75,30 +85,44 @@ class Rudder(BattleshipSystem):
         new_angle = current_angle - 5
         self.update_attribute("angle", new_angle)
 
-
 class Engine(BattleshipSystem):
     """Represents the engine system of the battleship."""
     
-    def commands(self):
-        return ["ACCELERATE", "DECELERATE"]
+    def setup(self):
+        # TODO: pull constants from a config file
+        self.min_speed = 0
+        self.max_speed = 15
+        self.acceleration = .5
+        self.desired_speed = 15
+        self.logging_variables = ["desired_speed"]
+    
+    def update(self, timedelta):
+        if not self.model.collision_event:
+            # Update the ship's current speed
+            if self.model.current_speed != self.desired_speed:
+                speed_difference = self.desired_speed - self.model.current_speed
+                # The acceleration change is the acceleration divided by the timedelta
+                acceleration_change = min(self.acceleration * timedelta, abs(speed_difference))
+                if speed_difference > 0:
+                    self.model.current_speed += acceleration_change
+                else:
+                    self.model.current_speed -= acceleration_change
+        else:
+            self.model.current_speed = 0
 
-    def handle_command(self, command):
+    def commands(self):
+        return ["SET_SPEED"]
+
+    def handle_command(self, command, *args):
         match command:
-            case "ACCELERATE":
-                self.accelerate()
-            case "DECELERATE":
-                self.decelerate()
+            case "SET_SPEED":
+                self.set_speed(*args)
             case _:
                 print(f"Unrecognized command: {command}")
 
-    def accelerate(self):
-        # Logic for acceleration
-        pass
-
-    def decelerate(self):
-        # Logic for deceleration
-        pass
-
+    def set_speed(self, new_speed):
+        if self.min_speed <= new_speed <= self.max_speed:
+            self.desired_speed = new_speed
 
 class Weapons(BattleshipSystem):
     """Represents the weapons system of the battleship."""
@@ -117,20 +141,28 @@ class Weapons(BattleshipSystem):
         # Logic to fire weapons
         pass
 
-
 class Navigation(BattleshipSystem):
     """Represents the navigation system of the battleship."""
     
-    def commands(self):
-        return ["SET_DESTINATION"]
+    def setup(self):
+        self.waypoints = []
+        self.projected_path = []
+    
+    def update(self, timedelta):
+        projected_path = [(self.model.x, self.model.y)]
+        for waypoint in self.waypoints:
+            projected_path.append((waypoint[0], waypoint[1]))
+        self.projected_path = projected_path
 
-    def handle_command(self, command):
+    def commands(self):
+        return ["ADD_WAYPOINT"]
+
+    def handle_command(self, command, *args):
         match command:
-            case "SET_DESTINATION":
-                self.set_destination()
+            case "ADD_WAYPOINT":
+                self.set_waypoint(*args)
             case _:
                 print(f"Unrecognized command: {command}")
 
-    def set_destination(self):
-        # Logic to set a new destination
-        pass
+    def add_waypoint(self, x, y):
+        self.waypoints.append((x, y))
