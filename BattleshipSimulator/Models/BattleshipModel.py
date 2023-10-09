@@ -28,15 +28,17 @@ class BattleshipModel:
         self.last_x = 0
         self.last_y = 0
         self.last_angle = 90
-        self.current_speed = 0
-        self.logging_variables = ["x", "y", "angle", "current_speed", "collision_warning", "collision_event"]
+        self.speed = 100
         
+        self.attributes = {}
+        self.observers = []
         self.systems = {}
         self.command_registry = {}
+        self.path = []
+        self.route = []
         self.setup()
     
     def setup(self):
-        self.world = None
         self.collision_warning = False
         self.collision_event = False
 
@@ -59,6 +61,11 @@ class BattleshipModel:
         self.battleship_geometry = SimulatorUtilities.transform_coordinates(self.battleship_geometry, -width / 2, -length / 2)
         self.minimum_safe_area_geometry = self.calculate_min_safe_distance_area()
 
+        # Generate objects that are in the way - make this better in the future
+        self.obstacles = [
+            [(260, 320), (365,350), (270,440), (260, 320)]
+        ]
+
     def update(self, timedelta):
         """
         Update the X and Y coordinates of the battleship at regular intervals.
@@ -69,31 +76,30 @@ class BattleshipModel:
             The time duration between coordinate updates (in seconds).
         """
         
-        self.collision_warning = False
-        self.collision_event = False
-        current_msa_geometry = SimulatorUtilities.transform_coordinates(self.minimum_safe_area_geometry, self.x, self.y, self.angle)
-        current_bs_geometry = SimulatorUtilities.transform_coordinates(self.battleship_geometry, self.x, self.y, self.angle)
-        for obstacle in self.world.obstacles:
-            if SimulatorUtilities.polygons_intersect(current_msa_geometry, obstacle):
-                self.collision_warning = True
-            if SimulatorUtilities.polygons_intersect(current_bs_geometry, obstacle):
-                self.collision_event = True
-        
-        for system in self.systems.values():
-            system.update(timedelta)
-        
-        if len(self.systems["Navigation"].waypoints) > 0:
+        if len(self.path) > 0:
             self.last_x, self.last_y, self.last_angle = self.x, self.y, self.angle
-            self.x, self.y, self.angle, self.systems["Navigation"].waypoints = SimulatorUtilities.update_path_coordinates_with_angle(self.systems["Navigation"].waypoints, self.current_speed, timedelta)
+            self.x, self.y, self.angle, self.path = SimulatorUtilities.update_path_coordinates_with_angle(self.path, self.speed, timedelta)
 
-    def logging_package(self):
-        logging_package = {k: getattr(self, k) for k in self.logging_variables}
-        for system in self.systems.values():
-            system_log_package = system.logging_package()
-            for k, v in system_log_package.items():
-                logging_package[k] = v
-        return logging_package
+            dx, dy, da = self.x - self.last_x, self.y - self.last_y, self.angle - self.last_angle
+            self.battleship_geometry = SimulatorUtilities.transform_coordinates(self.battleship_geometry, dx, dy, da)
+            self.minimum_safe_area_geometry = SimulatorUtilities.transform_coordinates(self.minimum_safe_area_geometry, dx, dy, da)
+        
+            self.collision_warning = False
+            self.collision_event = False
+            for obstacle in self.obstacles:
+                if SimulatorUtilities.polygons_intersect(self.minimum_safe_area_geometry, obstacle):
+                    self.collision_warning = True
+                if SimulatorUtilities.polygons_intersect(self.battleship_geometry, obstacle):
+                    self.collision_event = True
+            
+                print(f"{self.x},{self.y} @ {self.angle} deg", timedelta)
     
+    def set_path(self, coords):
+        self.path = []
+        self.path = (self.x, self.y)
+        for coord in coords:
+            self.path.append(coord)
+
     def set_attribute(self, system_name, attr_name, value):
         """
         Sets an attribute for a specific system and notifies observers.
@@ -127,7 +133,7 @@ class BattleshipModel:
         value : Any
             The value of the attribute.
         """
-        return getattr(self.systems[system_name], attr_name)
+        return self.attributes.get(system_name, {}).get(attr_name)
 
     def attach_system(self, system_name, system):
         """
