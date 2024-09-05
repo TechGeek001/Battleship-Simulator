@@ -1,6 +1,6 @@
-from BattleshipSimulator.Models.Logger import CSVLogger
+from BattleshipSimulator.Models.GetterSetter import GetterSetter
 
-class BattleshipController:
+class BattleshipController(GetterSetter):
     """
     The controller in the MVC architecture. Handles user interactions and updates the model.
 
@@ -10,7 +10,7 @@ class BattleshipController:
         The model representing the battleship's data and state.
     """
     
-    def __init__(self, world):
+    def __init__(self, simulation):
         """
         Initializes the BattleshipController with a model.
 
@@ -19,17 +19,21 @@ class BattleshipController:
         model : BattleshipModel
             The model representing the battleship's data and state.
         """
-        self.world = world
-        self.logger = CSVLogger("results.csv")
-        self.logger.log(self.world.logging_package())
-        self.simulation_running = True
+        super().__init__()
+        self.simulation = simulation
+        self.add_child("Simulation", self.simulation)
+    
+    def restart(self):
+        self.simulation.restart()
+        self.__init__(self.simulation)
+        self.simulation.start()
     
     def update(self, timedelta):
-        self.world.update(timedelta)
-        self.logger.log(self.world.logging_package())
-        if self.model_get("collision_event"):
-            self.terminate_simulation(False)
-            self.logger.close()
+        if self.simulation.simulation_running:
+            self.simulation.update(timedelta)
+
+    def logger_get(self, index):
+        return self.simulation.logger.get(index)
 
     def handle_action(self, action):
         """
@@ -41,27 +45,3 @@ class BattleshipController:
             The user action to handle.
         """
         self.model.handle_command(action)
-    
-    def world_get(self, variable_name):
-        if ":" not in variable_name:
-            return getattr(self.world, variable_name)
-        else:
-            system_name, variable_name = variable_name.split(":", maxsplit = 1)
-            return self.world.get_attribute(system_name, variable_name)
-    
-    def model_get(self, variable_name):
-        if ":" not in variable_name:
-            return getattr(self.world.models["Battleship"], variable_name)
-        else:
-            system_name, variable_name = variable_name.split(":", maxsplit = 1)
-            return self.world.models["Battleship"].get_attribute(system_name, variable_name)
-
-    def model_set(self, variable_name, value):
-        if ":" not in variable_name:
-            setattr(self.world.models["Battleship"], variable_name, value)
-        else:
-            system_name, variable_name = variable_name.split(":", maxsplit = 1)
-            self.world.models["Battleship"].set_attribute(system_name, variable_name, value)
-    
-    def terminate_simulation(self, status):
-        self.simulation_running = False
